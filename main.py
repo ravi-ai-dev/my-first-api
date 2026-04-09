@@ -1,47 +1,75 @@
-import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from pymongo import MongoClient
+from typing import List, Optional
+from datetime import datetime
+import motor.motor_asyncio
+import os
 
 app = FastAPI()
 
-# --- MONGODB SETUP ---
-# Railway khud 'MONGO_URL' provide karta hai, hum bas usse fetch kar rahe hain
-MONGO_URI = os.getenv("MONGO_URL", "mongodb://localhost:27017")
-client = MongoClient(MONGO_URI)
-db = client["my_database"]
-collection = db["skills"]
+# --- DATABASE CONNECTION ---
+# Railway par MONGO_URL set hona chahiye, varna local pe chalega
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URL)
+db = client.rio_ai_db
 
-# --- DATA MODEL ---
-class NayaSkill(BaseModel):
-    skill_name: str
-    experience_years: int
-    is_expert: bool
+# --- MODELS (Purana + Naya) ---
 
-# --- ROUTES ---
+# Purana Model (Skills wala)
+class Skill(BaseModel):
+    name: str
+    level: str
+
+# Naya Model (Arrangement wala)
+class Arrangement(BaseModel):
+    cx_mobile: str
+    medicine_name: str
+    warehouse: str  # Gaur City / Sector 78 / Indirapuram
+    executive_name: str
+    advance_amount: int
+    status: str = "Pending"
+    timestamp: datetime = datetime.now()
+
+# --- ENDPOINTS ---
 
 @app.get("/")
-def home():
-    return {"message": "API is Live and Running!", "docs": "/docs"}
+async def root():
+    return {"message": "Rio AI API is Live and Running!"}
 
+# 1. Purana Endpoint: My Info
 @app.get("/my-info")
-def get_my_info():
+async def get_info():
     return {
         "name": "Ravi Singh",
-        "role": "Chat Executive at Rio AI",
-        "goal": "Backend Developer & Data Expert",
-        "project": "Gobble Cube"
+        "role": "AI Automation & Backend Developer",
+        "company": "Rio AI Medicine"
     }
 
-@app.post("/add-skill")
-def add_skill(data: NayaSkill):
-    # MongoDB mein data insert karna
-    skill_dict = data.dict()
-    result = collection.insert_one(skill_dict)
-    return {"message": "Skill added successfully!", "id": str(result.inserted_id)}
+# 2. Naya Endpoint: Add Arrangement (Fake Data Testing ke liye)
+@app.post("/add-arrangement")
+async def add_arrangement(data: Arrangement):
+    # Dictionary mein convert karke DB mein save karna
+    new_doc = data.dict()
+    new_doc["timestamp"] = datetime.now() # Real time save karne ke liye
+    result = await db.arrangements.insert_one(new_doc)
+    return {"message": "Arrangement Recorded Successfully", "id": str(result.inserted_id)}
 
-@app.get("/get-skills")
-def get_skills():
-    # MongoDB se saara data nikaalna
-    all_skills = list(collection.find({}, {"_id": 0}))
-    return {"total_skills": len(all_skills), "skills": all_skills}
+# 3. Naya Endpoint: Get Zone Wise Data
+@app.get("/get-arrangements/{zone}")
+async def get_by_zone(zone: str):
+    cursor = db.arrangements.find({"warehouse": zone})
+    results = await cursor.to_list(length=100)
+    for res in results:
+        res["_id"] = str(res["_id"]) # MongoDB ki ID ko string banana padta hai
+    return results
+
+# 4. Status Update (Jab medicine mil jaye)
+@app.put("/update-status/{cx_mobile}")
+async def update_status(cx_mobile: str, status: str):
+    result = await db.arrangements.update_one(
+        {"cx_mobile": cx_mobile}, 
+        {"$set": {"status": status}}
+    )
+    if result.modified_count:
+        return {"message": f"Status updated to {status}"}
+    raise HTTPException(status_code=404, detail="Order not found")
