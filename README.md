@@ -16,7 +16,7 @@ Aap meri API ko yahan check kar sakte hain:
 ## 📌 Key Features
 - **Live Deployment:** Poori tarah internet par active hai.
 - **Data Integration:** Cloud-hosted MongoDB ke saath connected hai.
-- **Automation Ready:** Ise aage chal kar **Gobble Cube** project mein use kiya jayega.
+
 
 ## 🛤 API Endpoints
 | Method | Endpoint | Description |
